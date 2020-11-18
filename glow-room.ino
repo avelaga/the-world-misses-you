@@ -1,10 +1,11 @@
 #include <FastLED.h>
+#include "Raindrop.h"
 
-#define NUM_LEDS 50
+#define NUM_LEDS 150
 #define DATA1 4
 
 // twinkle vars
-#define DECREMENT_BY 4
+#define DECREMENT_BY 1
 #define INC_BY 150
 #define HUE_MIN 180
 #define HUE_MAX 210
@@ -14,11 +15,12 @@ int hue[NUM_LEDS];
 int randomNumber;
 
 // raindrop vars
-#define DROP_HUE 200
-#define DROP_DECREMENT 20;
-#define DROP_FREQ 30
+#define DROP_HUE 180
+#define DROP_DECREMENT 40;
 #define DROP_DELAY 20
-int dropPosition = NUM_LEDS - 1;
+#define NUM_DROPS 5
+
+Raindrop raindrops[NUM_DROPS];
 
 float currHue = 0;
 float inc = 0;
@@ -34,9 +36,9 @@ void setup() {
 }
 
 void loop() {
-  rainbow();
-//  twinkle();
-//  drop();
+//  rainbow();
+  twinkle();
+  drop();
   FastLED.show();
 }
 
@@ -76,11 +78,11 @@ void drop() {
     leds[i] = CHSV(DROP_HUE, 255, brightness[i]);
   }
 
-  brightness[dropPosition] = 255;
-  leds[dropPosition] = CHSV(DROP_HUE, 255, 255);
-  dropPosition--;
-  if (dropPosition < 0) {
-    dropPosition = NUM_LEDS - 1;
+  int currPos;
+  for(int dropIndex=0;dropIndex<NUM_DROPS;dropIndex++){
+    currPos = raindrops[dropIndex].updatePos();
+    brightness[currPos]= 255;
+    leds[currPos]= CHSV(DROP_HUE, 255, 255);
   }
   delay(DROP_DELAY);
 }
