@@ -3,6 +3,8 @@
 #include <WiFi.h>
 #include <HTTPClient.h>
 
+TaskHandle_t networkTask;
+
 const char* ssid = "milk steak with a side of jelly";
 char currMode;
 unsigned long timeSinceRequest = 0;
@@ -13,7 +15,7 @@ const int requestFreq = 1000;
 #define DATA1 2
 
 // twinkle vars
-#define DECREMENT_BY 4
+#define DECREMENT_BY 2
 #define INC_BY 150
 #define HUE_MIN 180
 #define HUE_MAX 210
@@ -53,6 +55,18 @@ void setup() {
   incSpeed = random(6, 9) / 100.0;
 
   Serial.begin(115200);
+
+  xTaskCreatePinnedToCore(
+    updateStatus,   /* Task function. */
+    "networkTask",     /* name of task. */
+    10000,       /* Stack size of task */
+    NULL,        /* parameter of the task */
+    2,           /* priority of the task */
+    &networkTask,      /* Task handle to keep track of created task */
+    0);          /* pin task to core 0 */
+  delay(500);
+
+
   connectToNetwork();
   Serial.println(WiFi.macAddress());
   Serial.println(WiFi.localIP());
@@ -61,7 +75,7 @@ void setup() {
 }
 
 void loop() {
-  updateStatus();
+  //  updateStatus();
   switch (currMode) {
     case '0':
       rainbow();
@@ -72,6 +86,9 @@ void loop() {
     case '2':
       drop();
       break;
+    case '3':
+      clearLeds();
+      break;
     default:
       clearLeds();
       break;
@@ -79,21 +96,23 @@ void loop() {
   FastLED.show();
 }
 
-void updateStatus() {
-  if (millis() - timeSinceRequest >= requestFreq) {
-    timeSinceRequest = millis();
-    if ((WiFi.status() == WL_CONNECTED)) { //Check the current connection status
-      HTTPClient http;
-      http.begin("http://192.168.4.1/status");
-      int httpCode = http.GET();                                        //Make the request
-      if (httpCode > 0) { //Check for the returning code
-        currMode = http.getString().charAt(0);
-        Serial.println(currMode);
+void updateStatus(void * pvParameters ) {
+  while (true) {
+    if (millis() - timeSinceRequest >= requestFreq) {
+      timeSinceRequest = millis();
+      if ((WiFi.status() == WL_CONNECTED)) { //Check the current connection status
+        HTTPClient http;
+        http.begin("http://192.168.4.1/status");
+        int httpCode = http.GET();                                        //Make the request
+        if (httpCode > 0) { //Check for the returning code
+          currMode = http.getString().charAt(0);
+          Serial.println(currMode);
+        }
+        else {
+          Serial.println("Error on HTTP request");
+        }
+        http.end(); //Free the resources
       }
-      else {
-        Serial.println("Error on HTTP request");
-      }
-      http.end(); //Free the resources
     }
   }
 }
@@ -126,7 +145,7 @@ void rainbow() {
 void twinkle() {
   twinkleDecrementBrightness();
   twinkleIncrementRandom();
-  delay(10);
+  delay(15); // prevents esp from programming leds too fast and failing
 }
 
 // OPTION 3
