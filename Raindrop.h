@@ -9,8 +9,10 @@ class Raindrop
   public:
     Raindrop();
     int updatePos();
+    int getHue();
   private:
     int pos;
+    int hue;
 };
 
 #endif
