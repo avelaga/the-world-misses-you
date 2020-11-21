@@ -13,6 +13,7 @@ int Raindrop::updatePos() {
   pos--;
   if (pos < 0) {
     pos = random(NUM_LEDS,NUM_LEDS*2);
+    hue = random(LOWER_HUE, UPPER_HUE);
   }
   return pos;
 }

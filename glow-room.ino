@@ -135,7 +135,11 @@ void rainbow() {
     if (currBrightness < 0) {
       currBrightness = 0;
     }
-    leds[i] = CHSV(currHue, 255, currBrightness);
+    hue[i] = currHue;
+    brightness[i] = currBrightness;
+    if (currBrightness > 100) { // allows for  abetter transition
+      leds[i] = CHSV(currHue, 255, currBrightness);
+    }
     currHue += .8; // incremenration of hues in the strip
   }
   noisePos += 1;
