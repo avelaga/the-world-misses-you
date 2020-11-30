@@ -7,20 +7,24 @@
 
 TaskHandle_t networkTask;
 
-//const char* ssid = "milk steak with a side of jelly";
+enum Conditions {
+  day, night, off, sunny, cloudy, rainy
+};
+
+Conditions weather = sunny;
+Conditions timeOfDay = day;
 
 const char* ssid     = "pearlgang";
 const char* password = "milksteak";
 
 const char* serverName = "http://api.weatherapi.com/v1/current.json?key=125ccd14d85a40e49f3224915201911&q=Austin";
-String weather = "";
+String weatherStr = "";
 String response;
 
-char currMode = '0';
+//char currMode = '0';
 unsigned long timeSinceRequest = 0;
 
 const int requestFreq = 900000; // every 15 mins
-//const int requestFreq = 10000;
 
 // time things
 const char* ntpServer = "pool.ntp.org";
@@ -91,32 +95,59 @@ void setup() {
 
   // Init and get the time
   configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
-  
+
   getCurrTime();
   getWeatherCondition();
+  updateEnums();
 }
 
 void loop() {
-//  Serial.println("in veginning of lopp");
-  switch (currMode) {
-    case '0':
-      rainbow();
+
+  switch (timeOfDay) {
+    case day:
+      switch (weather) {
+        case sunny:
+          rainbow();
+          break;
+        case rainy:
+          drop();
+          break;
+        case cloudy:
+          twinkle();
+          break;
+        default:
+          clearLeds();
+          break;
+      }
       break;
-    case '1':
+    case night:
       twinkle();
       break;
-    case '2':
-      drop();
-      break;
-    case '3':
+    case off:
       clearLeds();
       break;
     default:
       clearLeds();
       break;
   }
+  //  switch (currMode) {
+  //    case '0':
+  //      rainbow();
+  //      break;
+  //    case '1':
+  //      twinkle();
+  //      break;
+  //    case '2':
+  //      drop();
+  //      break;
+  //    case '3':
+  //      clearLeds();
+  //      break;
+  //    default:
+  //      clearLeds();
+  //      break;
+  //  }
   FastLED.show();
-//  Serial.println("iendg of lopp");
 }
 
 // helper for getWeatherCondition()
@@ -156,8 +187,8 @@ void getWeatherCondition() {
     JSONVar current = myObject["current"];
     JSONVar condition = current["condition"];
     JSONVar text = condition["text"];
-    weather = JSON.stringify(text);
-    Serial.println(weather);
+    weatherStr = JSON.stringify(text);
+    Serial.println(weatherStr);
   }
   else {
     Serial.println("WiFi Disconnected");
@@ -177,20 +208,47 @@ void getCurrTime() {
   Serial.println();
 }
 
-// new networking task to continuously update weather and time variables, replaces updateStatus
-// this function updates weather and currHour every 15 mins
+// continuously update weatherStr and time variables, replaces updateStatus
+// this function updates weatherStr and currHour every 15 mins
 void updateConditions(void * pvParameters ) {
   while (true) {
-//    Serial.println("while true of of networking func");
-//    if (millis() - timeSinceRequest >= requestFreq) {
-vTaskDelay(requestFreq);
-      Serial.println("beginnong of networking func");
-      timeSinceRequest = millis();
-      getWeatherCondition();
-      getCurrTime();
-      Serial.println("finished of networking func");
-//    }
+    vTaskDelay(requestFreq);
+    Serial.println("beginnong of networking func");
+    timeSinceRequest = millis();
+    getWeatherCondition();
+    getCurrTime();
+    updateEnums();
+    Serial.println("finished of networking func");
   }
+}
+
+void updateEnums() {
+  // look at currHour[3] and weatherStr to set curr enum
+  int currHourInt = 10 * (currHour[0] - '0') + (currHour[1] - '0');
+
+  // day time
+  if ((currHourInt >= 10) && (currHourInt <= 17)) {
+    timeOfDay = day;
+  }
+  // night time, ends at midnight
+  else if (currHourInt >= 18) {
+    timeOfDay = night;
+  }
+  else {
+    timeOfDay = off;
+  }
+
+  weatherStr.toLowerCase();
+  if (weatherStr.indexOf("rain") > 0) {
+    weather = rainy;
+  }
+  else if (weatherStr.indexOf("cloud") > 0 || weatherStr.indexOf("overcast") > 0) {
+    weather = cloudy;
+  } else {
+    weather = sunny;
+  }
+
+
 }
 
 void clearLeds() {
