@@ -1,15 +1,32 @@
 #include <FastLED.h>
 #include "Raindrop.h"
 #include <WiFi.h>
+#include "time.h"
 #include <HTTPClient.h>
+#include <Arduino_JSON.h>
 
 TaskHandle_t networkTask;
 
-const char* ssid = "milk steak with a side of jelly";
-char currMode;
+//const char* ssid = "milk steak with a side of jelly";
+
+const char* ssid     = "pearlgang";
+const char* password = "milksteak";
+
+const char* serverName = "http://api.weatherapi.com/v1/current.json?key=125ccd14d85a40e49f3224915201911&q=Austin";
+String weather = "";
+String response;
+
+char currMode = '0';
 unsigned long timeSinceRequest = 0;
 
-const int requestFreq = 1000;
+const int requestFreq = 900000; // every 15 mins
+//const int requestFreq = 10000;
+
+// time things
+const char* ntpServer = "pool.ntp.org";
+const long  gmtOffset_sec = -21600; // for CDT
+const int   daylightOffset_sec = 3600;
+char currHour[3];
 
 #define NUM_LEDS 150
 #define DATA1 2
@@ -41,7 +58,7 @@ float incSpeed;
 CRGB leds[NUM_LEDS];
 
 void connectToNetwork() {
-  WiFi.begin(ssid);
+  WiFi.begin(ssid, password);
   while (WiFi.status() != WL_CONNECTED) {
     delay(1000);
     Serial.println("Establishing connection to WiFi..");
@@ -57,9 +74,9 @@ void setup() {
   Serial.begin(115200);
 
   xTaskCreatePinnedToCore(
-    updateStatus,   /* Task function. */
+    updateConditions,   /* Task function. */
     "networkTask",     /* name of task. */
-    10000,       /* Stack size of task */
+    40000,       /* Stack size of task */
     NULL,        /* parameter of the task */
     2,           /* priority of the task */
     &networkTask,      /* Task handle to keep track of created task */
@@ -70,12 +87,17 @@ void setup() {
   connectToNetwork();
   Serial.println(WiFi.macAddress());
   Serial.println(WiFi.localIP());
-  Serial.println(WiFi.localIP());
   timeSinceRequest = millis();
+
+  // Init and get the time
+  configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
+  
+  getCurrTime();
+  getWeatherCondition();
 }
 
 void loop() {
-  //  updateStatus();
+//  Serial.println("in veginning of lopp");
   switch (currMode) {
     case '0':
       rainbow();
@@ -94,26 +116,80 @@ void loop() {
       break;
   }
   FastLED.show();
+//  Serial.println("iendg of lopp");
 }
 
-void updateStatus(void * pvParameters ) {
-  while (true) {
-    if (millis() - timeSinceRequest >= requestFreq) {
-      timeSinceRequest = millis();
-      if ((WiFi.status() == WL_CONNECTED)) { //Check the current connection status
-        HTTPClient http;
-        http.begin("http://192.168.4.1/status");
-        int httpCode = http.GET();                                        //Make the request
-        if (httpCode > 0) { //Check for the returning code
-          currMode = http.getString().charAt(0);
-          Serial.println(currMode);
-        }
-        else {
-          Serial.println("Error on HTTP request");
-        }
-        http.end(); //Free the resources
-      }
+// helper for getWeatherCondition()
+String weatherAPIRequest(const char* serverName) {
+  HTTPClient http;
+  http.begin(serverName);
+  int httpResponseCode = http.GET();
+
+  String payload = "{}";
+
+  if (httpResponseCode > 0) {
+    Serial.print("HTTP Response code: ");
+    Serial.println(httpResponseCode);
+    payload = http.getString();
+  }
+  else {
+    Serial.print("Error code: ");
+    Serial.println(httpResponseCode);
+  }
+
+  http.end();
+  return payload;
+}
+
+// sets weather string to latest condition
+void getWeatherCondition() {
+  if (WiFi.status() == WL_CONNECTED) {
+    response = weatherAPIRequest(serverName);
+    Serial.println(response); // prints full correct body
+    JSONVar myObject = JSON.parse(response);
+
+    if (JSON.typeof(myObject) == "undefined") {
+      Serial.println("Parsing input failed!");
+      return;
     }
+
+    JSONVar current = myObject["current"];
+    JSONVar condition = current["condition"];
+    JSONVar text = condition["text"];
+    weather = JSON.stringify(text);
+    Serial.println(weather);
+  }
+  else {
+    Serial.println("WiFi Disconnected");
+  }
+}
+
+void getCurrTime() {
+  struct tm timeinfo;
+  if (!getLocalTime(&timeinfo)) {
+    Serial.println("Failed to obtain time");
+    return;
+  }
+
+  Serial.println("the hour is:");
+  strftime(currHour, 3, "%H", &timeinfo);
+  Serial.println(currHour);
+  Serial.println();
+}
+
+// new networking task to continuously update weather and time variables, replaces updateStatus
+// this function updates weather and currHour every 15 mins
+void updateConditions(void * pvParameters ) {
+  while (true) {
+//    Serial.println("while true of of networking func");
+//    if (millis() - timeSinceRequest >= requestFreq) {
+vTaskDelay(requestFreq);
+      Serial.println("beginnong of networking func");
+      timeSinceRequest = millis();
+      getWeatherCondition();
+      getCurrTime();
+      Serial.println("finished of networking func");
+//    }
   }
 }
 
@@ -123,6 +199,7 @@ void clearLeds() {
     leds[x] = CHSV(0, 0, 0);
     hue[x] = 0;
   }
+  delay(15); // prevents esp from programming leds too fast and failing
 }
 
 // OPTION 1
@@ -137,9 +214,9 @@ void rainbow() {
     }
     hue[i] = currHue;
     brightness[i] = currBrightness;
-    if (currBrightness > 100) { // allows for  abetter transition
-      leds[i] = CHSV(currHue, 255, currBrightness);
-    }
+    //    if (currBrightness > 100) { // allows for  abetter transition
+    leds[i] = CHSV(currHue, 255, currBrightness);
+    //    }
     currHue += .8; // incremenration of hues in the strip
   }
   noisePos += 1;
