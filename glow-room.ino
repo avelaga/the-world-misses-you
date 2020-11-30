@@ -1,3 +1,7 @@
+// (c) 2020 abhi velaga
+// abhi.work/software
+// instagram.com/abhi.velaga
+
 #include <FastLED.h>
 #include "Raindrop.h"
 #include <WiFi.h>
@@ -50,9 +54,9 @@ int randomNumber;
 #define DROP_DECREMENT 45;
 #define DROP_DELAY 30
 #define NUM_DROPS 5
-
 Raindrop raindrops[NUM_DROPS];
 
+// rainbow vars
 float currHue = 0;
 float inc = 0;
 float hueInc = .03;
@@ -87,13 +91,12 @@ void setup() {
     0);          /* pin task to core 0 */
   delay(500);
 
-
   connectToNetwork();
   Serial.println(WiFi.macAddress());
   Serial.println(WiFi.localIP());
   timeSinceRequest = millis();
 
-  // Init and get the time
+  // Initialize time
   configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
 
   getCurrTime();
@@ -102,7 +105,6 @@ void setup() {
 }
 
 void loop() {
-
   switch (timeOfDay) {
     case day:
       switch (weather) {
@@ -130,23 +132,6 @@ void loop() {
       clearLeds();
       break;
   }
-  //  switch (currMode) {
-  //    case '0':
-  //      rainbow();
-  //      break;
-  //    case '1':
-  //      twinkle();
-  //      break;
-  //    case '2':
-  //      drop();
-  //      break;
-  //    case '3':
-  //      clearLeds();
-  //      break;
-  //    default:
-  //      clearLeds();
-  //      break;
-  //  }
   FastLED.show();
 }
 
@@ -213,17 +198,17 @@ void getCurrTime() {
 void updateConditions(void * pvParameters ) {
   while (true) {
     vTaskDelay(requestFreq);
-    Serial.println("beginnong of networking func");
     timeSinceRequest = millis();
     getWeatherCondition();
     getCurrTime();
     updateEnums();
-    Serial.println("finished of networking func");
   }
 }
 
+// look at currHour[3] and weatherStr to set current enums
 void updateEnums() {
-  // look at currHour[3] and weatherStr to set curr enum
+
+  // convert to int
   int currHourInt = 10 * (currHour[0] - '0') + (currHour[1] - '0');
 
   // day time
@@ -235,14 +220,15 @@ void updateEnums() {
     timeOfDay = night;
   }
   else {
+    // midnight to morning
     timeOfDay = off;
   }
 
   weatherStr.toLowerCase();
-  if (weatherStr.indexOf("rain") > 0) {
+  if (weatherStr.indexOf("rain") >= 0) {
     weather = rainy;
   }
-  else if (weatherStr.indexOf("cloud") > 0 || weatherStr.indexOf("overcast") > 0) {
+  else if (weatherStr.indexOf("cloud") >= 0 || weatherStr.indexOf("overcast") >= 0) {
     weather = cloudy;
   } else {
     weather = sunny;
@@ -260,7 +246,7 @@ void clearLeds() {
   delay(15); // prevents esp from programming leds too fast and failing
 }
 
-// OPTION 1
+// LED OPTION 1
 void rainbow() {
   currHue = inc;
   inc += hueInc;
@@ -280,14 +266,14 @@ void rainbow() {
   noisePos += 1;
 }
 
-// OPTION 2
+// LED OPTION 2
 void twinkle() {
   twinkleDecrementBrightness();
   twinkleIncrementRandom();
   delay(15); // prevents esp from programming leds too fast and failing
 }
 
-// OPTION 3
+// LED OPTION 3
 void drop() {
   for (int i = 0; i < NUM_LEDS; i++) {
     brightness[i] -= DROP_DECREMENT;
@@ -311,6 +297,7 @@ void drop() {
   delay(DROP_DELAY);
 }
 
+// twinkle helper 1
 void twinkleDecrementBrightness() {
   for (int x = 0; x < NUM_LEDS; x++) {
     if (brightness[x]) {
@@ -325,6 +312,7 @@ void twinkleDecrementBrightness() {
   }
 }
 
+// twinkle helper 2
 void twinkleIncrementRandom() {
   randomNumber = random(0, NUM_LEDS - 1);
   brightness[randomNumber] += INC_BY;
