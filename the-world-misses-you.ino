@@ -18,8 +18,8 @@ enum Conditions {
 Conditions weather = sunny;
 Conditions timeOfDay = day;
 
-const char* ssid     = "pearlgang";
-const char* password = "milksteak";
+const char* ssid     = "yourwifinamehere";
+const char* password = "supersecurepassword";
 
 const char* serverName = "http://api.weatherapi.com/v1/current.json?key=125ccd14d85a40e49f3224915201911&q=Austin";
 String weatherStr = "";
