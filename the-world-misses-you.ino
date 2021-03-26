@@ -8,8 +8,36 @@
 #include "time.h"
 #include <HTTPClient.h>
 #include <Arduino_JSON.h>
+#include <AsyncTCP.h>
+#include <ESPAsyncWebServer.h>
 
 TaskHandle_t networkTask;
+AsyncWebServer server(80);
+
+const char* PARAM_INPUT_1 = "input1";
+const char* PARAM_INPUT_2 = "input2";
+
+String mySsid = "LEDSSSSSS";
+bool apMode = true;
+
+
+// HTML web page to handle 2 input fields (input1, input2)
+const char index_html[] PROGMEM = R"rawliteral(
+<!DOCTYPE HTML><html><head>
+  <title>ESP Input Form</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  </head><body>
+  <h1>
+  <form action="/get">
+    wifi ssid: <input type="text" name="input1"><br/>
+    password: <input type="text" name="input2"> <br/>
+    <input type="submit" value="Submit">
+  </form><br></h1>
+</body></html>)rawliteral";
+
+void notFound(AsyncWebServerRequest *request) {
+  request->send(404, "text/plain", "Not found");
+}
 
 enum Conditions {
   day, night, off, sunny, cloudy, rainy
@@ -18,8 +46,8 @@ enum Conditions {
 Conditions weather = sunny;
 Conditions timeOfDay = day;
 
-const char* ssid     = "yourwifinamehere";
-const char* password = "supersecurepassword";
+String ssid     = "";
+String password = "";
 
 const char* serverName = "http://api.weatherapi.com/v1/current.json?key=125ccd14d85a40e49f3224915201911&q=Austin";
 String weatherStr = "";
@@ -65,33 +93,17 @@ float incSpeed;
 
 CRGB leds[NUM_LEDS];
 
+// switch to station mode and connect to wifi with submitted parameters
 void connectToNetwork() {
-  WiFi.begin(ssid, password);
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(ssid.c_str(), password.c_str());
   while (WiFi.status() != WL_CONNECTED) {
     delay(1000);
     Serial.println("Establishing connection to WiFi..");
   }
   Serial.println("Connected to network");
-}
+  apMode = false;
 
-void setup() {
-  LEDS.addLeds<WS2812, DATA1, RGB>(leds, NUM_LEDS);
-  LEDS.setBrightness(255);
-  incSpeed = random(6, 9) / 100.0;
-
-  Serial.begin(115200);
-
-  xTaskCreatePinnedToCore(
-    updateConditions,   /* Task function. */
-    "networkTask",     /* name of task. */
-    40000,       /* Stack size of task */
-    NULL,        /* parameter of the task */
-    2,           /* priority of the task */
-    &networkTask,      /* Task handle to keep track of created task */
-    0);          /* pin task to core 0 */
-  delay(500);
-
-  connectToNetwork();
   Serial.println(WiFi.macAddress());
   Serial.println(WiFi.localIP());
   timeSinceRequest = millis();
@@ -102,37 +114,107 @@ void setup() {
   getCurrTime();
   getWeatherCondition();
   updateEnums();
+
+  xTaskCreatePinnedToCore(
+    updateConditions,   /* Task function. */
+    "networkTask",     /* name of task. */
+    40000,       /* Stack size of task */
+    NULL,        /* parameter of the task */
+    2,           /* priority of the task */
+    &networkTask,      /* Task handle to keep track of created task */
+    0);          /* pin task to core 0 */
+  delay(500);
+}
+
+// setup access point, then deploy config page
+void AP() {
+  Serial.print("Setting AP (Access Point)…");
+  WiFi.softAP(mySsid.c_str());
+  IPAddress IP = WiFi.softAPIP();
+  Serial.print("AP IP address: ");
+  Serial.println(IP);
+
+  server.begin();
+  configPage();
+}
+
+// deploy server to handle config page
+void configPage() {
+  // Send web page with input fields to client
+  server.on("/", HTTP_GET, [](AsyncWebServerRequest * request) {
+    request->send_P(200, "text/html", index_html);
+  });
+
+  // Send a GET request to <ESP_IP>/get?input1=<inputMessage>
+  server.on("/get", HTTP_GET, [] (AsyncWebServerRequest * request) {
+    String p1;
+    String p2;
+    // GET input1 value on <ESP_IP>/get?input1=<inputMessage>
+    if (request->hasParam(PARAM_INPUT_1)) {
+      ssid = request->getParam(PARAM_INPUT_1)->value();
+      p1 = PARAM_INPUT_1;
+    }
+    // GET input2 value on <ESP_IP>/get?input2=<inputMessage>
+    if (request->hasParam(PARAM_INPUT_2)) {
+      password = request->getParam(PARAM_INPUT_2)->value();
+      p2 = PARAM_INPUT_2;
+    }
+
+    Serial.println(ssid);
+    Serial.println(password);
+    request->send(200, "text/html", "<h1>Connecting to " + ssid + "</h1>");
+    connectToNetwork(); // PARAMS SUBMITTED! switch to station mode and connect to wifi with them
+  });
+  server.onNotFound(notFound);
+  server.begin();
+}
+
+void setup() {
+  LEDS.addLeds<WS2812, DATA1, RGB>(leds, NUM_LEDS);
+  LEDS.setBrightness(255);
+  incSpeed = random(6, 9) / 100.0;
+
+  Serial.begin(115200);
+
+
+
+  //  connectToNetwork();
+  AP();
+
+
 }
 
 void loop() {
-  switch (timeOfDay) {
-    case day:
-      switch (weather) {
-        case sunny:
-          rainbow();
-          break;
-        case rainy:
-          drop();
-          break;
-        case cloudy:
-          twinkle();
-          break;
-        default:
-          clearLeds();
-          break;
-      }
-      break;
-    case night:
-      twinkle();
-      break;
-    case off:
-      clearLeds();
-      break;
-    default:
-      clearLeds();
-      break;
+  if (!apMode) {
+    switch (timeOfDay) {
+      case day:
+        switch (weather) {
+          case sunny:
+            rainbow();
+            break;
+          case rainy:
+            drop();
+            break;
+          case cloudy:
+            twinkle();
+            break;
+          default:
+            clearLeds();
+            break;
+        }
+        break;
+      case night:
+        twinkle();
+        break;
+      case off:
+        clearLeds();
+        break;
+      default:
+        clearLeds();
+        break;
+    }
+    FastLED.show();
   }
-  FastLED.show();
 }
 
 // helper for getWeatherCondition()
@@ -197,11 +279,20 @@ void getCurrTime() {
 // this function updates weatherStr and currHour every 15 mins
 void updateConditions(void * pvParameters ) {
   while (true) {
-    vTaskDelay(requestFreq);
-    timeSinceRequest = millis();
-    getWeatherCondition();
-    getCurrTime();
-    updateEnums();
+    if (!apMode) {
+      if (WiFi.status() != WL_CONNECTED) {
+        while (WiFi.status() != WL_CONNECTED) {
+          WiFi.begin(ssid.c_str(), password.c_str());
+          delay(1000);
+          Serial.println("Trying to recconect to wifi");
+        }
+      }
+      vTaskDelay(requestFreq);
+      timeSinceRequest = millis();
+      getWeatherCondition();
+      getCurrTime();
+      updateEnums();
+    }
   }
 }
 
