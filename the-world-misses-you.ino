@@ -17,7 +17,7 @@ AsyncWebServer server(80);
 const char* PARAM_INPUT_1 = "input1";
 const char* PARAM_INPUT_2 = "input2";
 
-String mySsid = "LEDSSSSSS";
+String mySsid = "the world misses you";
 bool apMode = true;
 
 
@@ -65,7 +65,7 @@ const int   daylightOffset_sec = 3600;
 char currHour[3];
 
 #define NUM_LEDS 150
-#define DATA1 2
+#define DATA1 4
 
 // twinkle vars
 #define DECREMENT_BY 2
@@ -95,6 +95,7 @@ CRGB leds[NUM_LEDS];
 
 // switch to station mode and connect to wifi with submitted parameters
 void connectToNetwork() {
+  apMode = false;
   WiFi.mode(WIFI_STA);
   WiFi.begin(ssid.c_str(), password.c_str());
   while (WiFi.status() != WL_CONNECTED) {
@@ -102,8 +103,7 @@ void connectToNetwork() {
     Serial.println("Establishing connection to WiFi..");
   }
   Serial.println("Connected to network");
-  apMode = false;
-
+  
   Serial.println(WiFi.macAddress());
   Serial.println(WiFi.localIP());
   timeSinceRequest = millis();
@@ -133,6 +133,7 @@ void AP() {
   IPAddress IP = WiFi.softAPIP();
   Serial.print("AP IP address: ");
   Serial.println(IP);
+  Serial.println(WiFi.macAddress());
 
   server.begin();
   configPage();
@@ -173,15 +174,9 @@ void setup() {
   LEDS.addLeds<WS2812, DATA1, RGB>(leds, NUM_LEDS);
   LEDS.setBrightness(255);
   incSpeed = random(6, 9) / 100.0;
-
   Serial.begin(115200);
-
-
-
-  //  connectToNetwork();
   AP();
-
-
+//connectToNetwork();
 }
 
 void loop() {
@@ -280,15 +275,14 @@ void getCurrTime() {
 void updateConditions(void * pvParameters ) {
   while (true) {
     if (!apMode) {
-      if (WiFi.status() != WL_CONNECTED) {
         while (WiFi.status() != WL_CONNECTED) {
           WiFi.begin(ssid.c_str(), password.c_str());
-          delay(1000);
+          vTaskDelay(1000);
           Serial.println("Trying to recconect to wifi");
         }
-      }
       vTaskDelay(requestFreq);
       timeSinceRequest = millis();
+      Serial.println("getting weather");
       getWeatherCondition();
       getCurrTime();
       updateEnums();
